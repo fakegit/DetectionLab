@@ -13,7 +13,12 @@ If ($hostname -eq "win10") {
   # Adding Defender exclusions just in case
   Set-MpPreference -ExclusionPath "C:\Tools"
   Add-MpPreference -ExclusionPath "C:\Users\vagrant\AppData\Local\Temp"
-  Set-MpPreference -DisableRealtimeMonitoring $true
+
+  . c:\vagrant\scripts\Invoke-CommandAs.ps1
+  Invoke-CommandAs 'NT SERVICE\TrustedInstaller' {
+    Set-Service WinDefend -StartupType Disabled
+    Stop-Service WinDefend
+  }
 }
 
 # Windows Defender should be disabled by the GPO or uninstalled already, but we'll keep this just in case
@@ -91,7 +96,7 @@ If (-not (Test-Path "c:\Tools\PurpleSharp")) {
 
 Write-Host "$('[{0:HH:mm}]' -f (Get-Date)) Determining latest release of Purplesharp..."
 $tag = (Invoke-WebRequest "https://api.github.com/repos/mvelazc0/PurpleSharp/releases" -UseBasicParsing | ConvertFrom-Json)[0].tag_name
-$purplesharpDownloadUrl = "https://github.com/mvelazc0/PurpleSharp/releases/download/$tag/PurpleSharp.exe"
+$purplesharpDownloadUrl = "https://github.com/mvelazc0/PurpleSharp/releases/download/$tag/PurpleSharp_x64.exe"
 If (-not (Test-Path "c:\Tools\PurpleSharp\PurpleSharp.exe")) {
   Invoke-WebRequest -Uri $purplesharpDownloadUrl -OutFile "c:\Tools\PurpleSharp\PurpleSharp.exe"
 } Else {

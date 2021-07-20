@@ -172,8 +172,8 @@ resource "aws_instance" "logger" {
   instance_type = "t3.medium"
   ami           = coalesce(var.logger_ami, data.aws_ami.logger_ami.image_id)
 
-  tags = merge(var.custom-tags, map(
-    "Name", "${var.instance_name_prefix}logger"
+  tags = merge(var.custom-tags, tomap(
+    {"Name" = "${var.instance_name_prefix}logger"}
   ))
 
   subnet_id              = aws_subnet.default.id
@@ -181,38 +181,30 @@ resource "aws_instance" "logger" {
   key_name               = aws_key_pair.auth.key_name
   private_ip             = "192.168.38.105"
 
-  # Provision the AWS Ubuntu 18.04 AMI from scratch.
   provisioner "remote-exec" {
     inline = [
-      "sudo apt-get -qq update && sudo apt-get -qq install -y git",
-      "echo 'logger' | sudo tee /etc/hostname && sudo hostnamectl set-hostname logger",
-      "sudo adduser --disabled-password --gecos \"\" vagrant && echo 'vagrant:vagrant' | sudo chpasswd",
-      "sudo mkdir /home/vagrant/.ssh && sudo cp /home/ubuntu/.ssh/authorized_keys /home/vagrant/.ssh/authorized_keys && sudo chown -R vagrant:vagrant /home/vagrant/.ssh",
-      "echo 'vagrant    ALL=(ALL:ALL) NOPASSWD:ALL' | sudo tee -a /etc/sudoers",
-      "sudo git clone https://github.com/clong/DetectionLab.git /opt/DetectionLab",
-      "sudo sed -i 's/eth1/ens5/g' /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
-      "sudo sed -i 's/ETH1/ens5/g' /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
-      "sudo sed -i 's/eth1/ens5/g' /opt/DetectionLab/Vagrant/resources/suricata/suricata.yaml",
-      "sudo sed -i -e '127,130d' /opt/DetectionLab/Vagrant/resources/suricata/suricata.yaml",
-      "sudo sed -i 's#/vagrant/resources#/opt/DetectionLab/Vagrant/resources#g' /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
-      "sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config",
-      "sudo service ssh restart",
-      "sudo chmod +x /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
       "sudo apt-get -qq update",
-      "sudo /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
+      "sudo git clone https://github.com/clong/DetectionLab.git /opt/DetectionLab",
+      "sudo chmod +x /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
+      "sudo sed -i 's#/vagrant/resources#/opt/DetectionLab/Vagrant/resources#g' /opt/DetectionLab/Vagrant/logger_bootstrap.sh",
+      "sudo yq d -i /etc/suricata/suricata.yaml af-packet[1]", 
+      "sudo sed -i '1s/^/\\%YAML 1.1\\n---\\n/g' /etc/suricata/suricata.yaml",
+      "sudo cp /opt/DetectionLab/Vagrant/resources/fleet/fleet.service /etc/systemd/system/fleet.service && sudo systemctl daemon-reload && sudo service fleet restart",
+      "sudo service suricata restart",
+      "sudo /opt/DetectionLab/Vagrant/logger_bootstrap.sh splunk_only",
     ]
 
     connection {
       host        = coalesce(self.public_ip, self.private_ip)
       type        = "ssh"
-      user        = "ubuntu"
-      private_key = file(var.private_key_path)
+      user        = "vagrant"
+      password    = "vagrant"
     }
   }
 
   root_block_device {
     delete_on_termination = true
-    volume_size           = 64
+    volume_size           = 64 
   }
 }
 
@@ -237,8 +229,8 @@ resource "aws_instance" "dc" {
   # Uses the local variable if external data source resolution fails
   ami = coalesce(var.dc_ami, data.aws_ami.dc_ami.image_id)
 
-  tags = merge(var.custom-tags, map(
-    "Name", "${var.instance_name_prefix}dc.windomain.local"
+  tags = merge(var.custom-tags, tomap(
+    {"Name" = "${var.instance_name_prefix}dc.windomain.local"}
   ))
 
   subnet_id              = aws_subnet.default.id
@@ -272,8 +264,8 @@ resource "aws_instance" "wef" {
   # Uses the local variable if external data source resolution fails
   ami = coalesce(var.wef_ami, data.aws_ami.wef_ami.image_id)
 
-  tags = merge(var.custom-tags, map(
-    "Name", "${var.instance_name_prefix}wef.windomain.local"
+  tags = merge(var.custom-tags, tomap(
+    {"Name" = "${var.instance_name_prefix}wef.windomain.local"}
   ))
 
   subnet_id              = aws_subnet.default.id
@@ -284,43 +276,6 @@ resource "aws_instance" "wef" {
     delete_on_termination = true
   }
 }
-
-# Uncomment when the AMI has been created
-# resource "aws_instance" "exchange" {
-#   instance_type = "t3.medium"
-#   count = var.create_exchange_server ? 1 : 0
-
-#   provisioner "remote-exec" {
-#     inline = [
-#       "choco install -force -y winpcap",
-#       "powershell.exe -c \"Add-Content 'c:\\windows\\system32\\drivers\\etc\\hosts' '        192.168.38.102    dc.windomain.local'\"",
-#       "powershell.exe -c \"Add-Content 'c:\\windows\\system32\\drivers\\etc\\hosts' '        192.168.38.102    windomain.local'\"",
-#       "ipconfig /renew",
-#     ]
-
-#     connection {
-#       type     = "winrm"
-#       user     = "vagrant"
-#       password = "vagrant"
-#       host     = coalesce(self.public_ip, self.private_ip)
-#     }
-#   }
-
-#   # Uses the local variable if external data source resolution fails
-#   ami = coalesce(var.exchange_ami, data.aws_ami.exchange_ami.image_id)
-
-#   tags = merge(var.custom-tags, map(
-#     "Name", "${var.instance_name_prefix}exchange.windomain.local"
-#   ))
-
-#   subnet_id              = aws_subnet.default.id
-#   vpc_security_group_ids = [aws_security_group.windows.id]
-#   private_ip             = "192.168.38.106"
-
-#   root_block_device {
-#     delete_on_termination = true
-#   }
-# }
 
 resource "aws_instance" "win10" {
   instance_type = "t2.medium"
@@ -344,8 +299,8 @@ resource "aws_instance" "win10" {
   # Uses the local variable if external data source resolution fails
   ami = coalesce(var.win10_ami, data.aws_ami.win10_ami.image_id)
 
-  tags = merge(var.custom-tags, map(
-    "Name", "${var.instance_name_prefix}win10.windomain.local"
+  tags = merge(var.custom-tags, tomap(
+    {"Name" = "${var.instance_name_prefix}win10.windomain.local"}
   ))
 
   subnet_id              = aws_subnet.default.id
